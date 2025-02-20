@@ -8,7 +8,3 @@ This is an iOS facial recognition app that can pull up custom user files with an
 - Custom FastAPI
 - iOS app built on Xcode through Swift
 
-  
-## Info ℹ️ 
-- API backend can be found under master branch
-- Frontend Xcode can be found under Xcode branch
