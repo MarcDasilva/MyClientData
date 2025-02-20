@@ -1,0 +1,6 @@
+fastapi==0.95.1
+uvicorn==0.22.0
+opencv-python==4.7.0.72
+numpy==1.24.1
+dlib==19.24.0
+pymongo==4.3.3
