@@ -1,0 +1,675 @@
+import SwiftUI
+
+//MARK: Sample Entry
+struct Entry: Identifiable, Codable {
+    var id: String?  // or use String if you prefer, based on your API response
+    let name: String
+    let imageName: String
+    let info: String
+}
+
+
+// MARK: - ContentView Page
+struct ContentView: View {
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 30) {
+                Text("My Client Database".components(separatedBy: " ").joined(separator: "\n"))
+                    .font(.system(size: 45, weight: .bold, design: .monospaced))
+                    .foregroundColor(Color(hex: "#05957B"))
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color(hex: "#1F1B2B"))
+                    .cornerRadius(15)
+                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 40)
+                    .offset(x: 0, y: 95)
+                
+                Image("Logo")
+                    .resizable()
+                    .offset(x: 80, y: -170)
+                    .frame(width: 140, height: 120)
+                
+                NavigationLink(destination: CheckEntriesView()) {
+                    Text("View Entries")
+                        .font(.system(size: 25, weight: .bold, design: .monospaced))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#05957B"))
+                        .foregroundColor(Color(hex: "#1F1B2B"))
+                        .cornerRadius(10)
+                }
+                
+                NavigationLink(destination: SearchEntriesView()) {
+                    Text("Search Entries")
+                        .font(.system(size: 25, weight: .bold, design: .monospaced))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#05957B"))
+                        .foregroundColor(Color(hex: "#1F1B2B"))
+                        .cornerRadius(10)
+                }
+                
+                NavigationLink(destination: AddEntryView()) {
+                    Text("Add Entry")
+                        .font(.system(size: 25, weight: .bold, design: .monospaced))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#05957B"))
+                        .foregroundColor(Color(hex: "#1F1B2B"))
+                        .cornerRadius(10)
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .background(Color(hex: "#1F1B2B"))
+            .navigationTitle("Home")
+            .onAppear {
+                // Reapply the custom navigation bar appearance whenever the view appears
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.titleTextAttributes = [
+                    .foregroundColor: UIColor.white,
+                    .font: UIFont.monospacedSystemFont(ofSize: 40, weight: .bold)
+                ]
+                appearance.largeTitleTextAttributes = [
+                    .foregroundColor: UIColor.white,
+                    .font: UIFont.monospacedSystemFont(ofSize: 40, weight: .bold)
+                ]
+                appearance.backgroundColor = UIColor(Color(hex: "#05957B"))
+                UINavigationBar.appearance().standardAppearance = appearance
+                UINavigationBar.appearance().scrollEdgeAppearance = appearance
+            }
+        }
+    }
+}
+
+
+
+// MARK: - CheckEntriesView
+struct CheckEntriesView: View {
+    @State private var entries: [Entry] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        VStack {
+            if isLoading {
+                ProgressView("Loading entries...")
+            } else if let errorMessage = errorMessage {
+                Text(errorMessage)
+                    .foregroundColor(.red)
+                    .padding()
+            } else {
+                List(entries) { entry in
+                    NavigationLink(destination: EntryDetailView(entry: entry)) {
+                        HStack(spacing: 15) {
+                            if let encodedImageName = entry.imageName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                               let url = URL(string: "http://INSERTIPHERE:8000/get_image/\(encodedImageName)") {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ProgressView()
+                                    case .success(let image):
+                                        image.resizable()
+                                             .scaledToFill()
+                                             .frame(width: 50, height: 50)
+                                             .clipShape(Circle())
+                                    case .failure:
+                                        Image(systemName: "photo")
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 50, height: 50)
+                                            .clipShape(Circle())
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
+                            } else {
+                                Image(systemName: "photo")
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 50, height: 50)
+                                    .clipShape(Circle())
+                            }
+                            
+                            Text(entry.name)
+                                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                .foregroundColor(Color(hex: "#05957B"))
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+                .listStyle(PlainListStyle())
+            }
+        }
+        .navigationTitle("View Entries")
+        .background(Color(hex: "#1F1B2B").edgesIgnoringSafeArea(.all))
+        .onAppear {
+            fetchEntries()
+        }
+    }
+    
+    func fetchEntries() {
+        guard let url = URL(string: "http://INSERTIPHERE:8000/list_entries") else {
+            errorMessage = "Invalid API URL"
+            isLoading = false
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                isLoading = false
+                if let error = error {
+                    errorMessage = "Error: \(error.localizedDescription)"
+                    return
+                }
+                
+                guard let data = data else {
+                    errorMessage = "No data received from server"
+                    return
+                }
+                
+                do {
+                    let decodedEntries = try JSONDecoder().decode([Entry].self, from: data)
+                    entries = decodedEntries
+                } catch {
+                    errorMessage = "Failed to decode response"
+                }
+            }
+        }.resume()
+    }
+}
+
+// MARK: - EntryDetailView
+struct EntryDetailView: View {
+    let entry: Entry
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Pull a fresh image request every time by appending a timestamp.
+                if let encodedImageName = entry.imageName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) {
+                    let imageURLString = "http://INSERTIPHERE:8000/get_image/\(encodedImageName)?t=\(Date().timeIntervalSince1970)"
+                    if let url = URL(string: imageURLString) {
+                        NewRequestImageView(url: url)
+                    } else {
+                        fallbackImage
+                    }
+                } else {
+                    fallbackImage
+                }
+                
+                // Display the entry name
+                Text(entry.name)
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                
+                // Display the additional info
+                Text(entry.info)
+                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                
+                Spacer()
+            }
+        }
+        .navigationTitle(entry.name)
+        .background(Color(hex: "#1F1B2B").edgesIgnoringSafeArea(.all))
+    }
+    
+    private var fallbackImage: some View {
+        Image(systemName: "photo")
+            .resizable()
+            .scaledToFit()
+            .frame(height: 200)
+            .cornerRadius(10)
+            .padding(.top, 20)
+    }
+}
+
+// MARK: - SearchEntriesView
+struct SearchEntriesView: View {
+    @State private var selectedImage: UIImage? = nil
+    @State private var showImagePicker = false
+    @State private var isSearching = false
+    @State private var matchedEntry: Entry? = nil
+    @State private var navigateToMatchedEntry: Bool = false
+    @State private var alertMessage: String?
+    @State private var showAlert: Bool = false
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Display the selected image or placeholder text.
+            if let image = selectedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+            } else {
+                Text("No image selected")
+                    .foregroundColor(.gray)
+                    .padding()
+            }
+            
+            // Button to choose an image.
+            Button(action: {
+                showImagePicker = true
+            }) {
+                Text("Select Image")
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(hex: "#05957B"))
+                    .foregroundColor(Color(hex: "#1F1B2B"))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+            }
+            
+            // Button to trigger face search when an image is available.
+            if selectedImage != nil {
+                Button(action: {
+                    searchFace()
+                }) {
+                    if isSearching {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "#1F1B2B")))
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Search Face")
+                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    }
+                }
+                .padding()
+                .background(Color(hex: "#05957B"))
+                .foregroundColor(Color(hex: "#1F1B2B"))
+                .cornerRadius(10)
+                .padding(.horizontal, 20)
+            }
+            
+            Spacer()
+        }
+        .navigationTitle("Search Entries")
+        .background(Color(hex: "#1F1B2B").edgesIgnoringSafeArea(.all))
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(image: $selectedImage)
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(title: Text("Search Status"),
+                  message: Text(alertMessage ?? "Unknown error"),
+                  dismissButton: .default(Text("OK")))
+        }
+        // Hidden navigation link that triggers automatically when a match is found.
+        .background(
+            NavigationLink(
+                destination: matchedEntry != nil ? EntryDetailView(entry: matchedEntry!) : nil,
+                isActive: $navigateToMatchedEntry,
+                label: { EmptyView() }
+            )
+        )
+    }
+    
+    /// Sends the selected image to the /recognize API endpoint.
+    private func searchFace() {
+        guard let image = selectedImage,
+              let imageData = image.jpegData(compressionQuality: 0.8) else {
+            alertMessage = "Please select an image."
+            showAlert = true
+            return
+        }
+        
+        isSearching = true
+        let boundary = UUID().uuidString
+        guard let url = URL(string: "http://INSERTIPHERE:8000/recognize") else {
+            alertMessage = "Invalid API URL"
+            showAlert = true
+            isSearching = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        // Construct the multipart/form-data body.
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                isSearching = false
+                if let error = error {
+                    alertMessage = "Error: \(error.localizedDescription)"
+                    showAlert = true
+                    return
+                }
+                guard let data = data else {
+                    alertMessage = "No data received from server."
+                    showAlert = true
+                    return
+                }
+                do {
+                    if let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                        if let errorMsg = jsonResponse["error"] as? String {
+                            alertMessage = errorMsg
+                            showAlert = true
+                        } else {
+                            let name = jsonResponse["name"] as? String ?? "Unknown"
+                            let info = jsonResponse["info"] as? String ?? ""
+                            let imageName = jsonResponse["image_name"] as? String ?? "default.jpg"
+                            
+                            if name == "Unknown" {
+                                alertMessage = "No match found"
+                                showAlert = true
+                            } else {
+                                // Use the actual image name from the server response
+                                matchedEntry = Entry(id: nil, name: name, imageName: imageName, info: info)
+                                navigateToMatchedEntry = true
+                            }
+                        }
+                    } else {
+                        alertMessage = "Invalid response from server."
+                        showAlert = true
+                    }
+                } catch {
+                    alertMessage = "Failed to parse server response."
+                    showAlert = true
+                }
+            }
+        }.resume()
+    }
+}
+
+// MARK: - GrowingTextViewWrapper with Alignment Fix
+class GrowingTextViewWrapper: UIView, UITextViewDelegate {
+    let textView = UITextView()
+    let placeholderLabel = UILabel()
+    var minHeight: CGFloat = 40
+    var textChanged: ((String) -> Void)?
+    
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setup()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+    
+    private func setup() {
+        // Configure the UITextView.
+        textView.backgroundColor = .clear
+        textView.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .medium)
+        textView.textColor = UIColor.label
+        textView.textAlignment = .left  // Ensures text aligns with the Name field
+        textView.isScrollEnabled = false
+        textView.delegate = self
+        // Set insets so that the text lines up with the Name field.
+        textView.textContainerInset = UIEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+        // Remove default line fragment padding to match the TextField exactly.
+        textView.textContainer.lineFragmentPadding = 0
+        addSubview(textView)
+        
+        // Configure the placeholder label.
+        placeholderLabel.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .medium)
+        placeholderLabel.textColor = UIColor.placeholderText
+        addSubview(placeholderLabel)
+        
+        // Setup auto-layout.
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            textView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            textView.topAnchor.constraint(equalTo: topAnchor),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            
+            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 16),
+            placeholderLabel.topAnchor.constraint(equalTo: textView.topAnchor, constant: 12)
+        ])
+    }
+    
+    func textViewDidChange(_ textView: UITextView) {
+        placeholderLabel.isHidden = !textView.text.isEmpty
+        textChanged?(textView.text)
+        invalidateIntrinsicContentSize()
+    }
+    
+    override var intrinsicContentSize: CGSize {
+        // Calculate height based on content; use minHeight if needed.
+        let size = textView.sizeThatFits(CGSize(width: bounds.width, height: CGFloat.greatestFiniteMagnitude))
+        let height = max(size.height, minHeight)
+        return CGSize(width: UIView.noIntrinsicMetric, height: height)
+    }
+}
+
+// MARK: - GrowingTextView and InfoField
+struct GrowingTextView: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String = "Info"
+    var minHeight: CGFloat = 40
+    
+    func makeUIView(context: Context) -> GrowingTextViewWrapper {
+        let view = GrowingTextViewWrapper()
+        view.minHeight = minHeight
+        view.textView.text = text
+        view.placeholderLabel.text = placeholder
+        view.placeholderLabel.isHidden = !text.isEmpty
+        view.textChanged = { newText in
+            DispatchQueue.main.async {
+                self.text = newText
+            }
+        }
+        return view
+    }
+    
+    func updateUIView(_ uiView: GrowingTextViewWrapper, context: Context) {
+        if uiView.textView.text != text {
+            uiView.textView.text = text
+        }
+        uiView.placeholderLabel.isHidden = !text.isEmpty
+    }
+}
+
+struct InfoField: View {
+    @Binding var text: String
+    
+    var body: some View {
+        GrowingTextView(text: $text)
+            .frame(minHeight: 40)
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+            .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - AddEntryView with Updated Error Handling
+struct AddEntryView: View {
+    @State private var name: String = ""
+    @State private var info: String = ""
+    @State private var image: UIImage? = nil
+    @State private var showImagePicker: Bool = false
+    
+    @State private var showAlert: Bool = false
+    @State private var alertMessage: String = ""
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Name TextField with matching styling.
+                TextField("Name", text: $name)
+                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                    .padding(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                
+                // Info field.
+                InfoField(text: $info)
+                
+                if let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 200)
+                        .cornerRadius(10)
+                        .padding(.horizontal, 20)
+                }
+                
+                Button(action: { showImagePicker = true }) {
+                    Text("Add Image")
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#05957B"))
+                        .foregroundColor(Color(hex: "#1F1B2B"))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 20)
+                }
+                
+                Button(action: { submitEntry() }) {
+                    Text("Submit Entry")
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#05957B"))
+                        .foregroundColor(Color(hex: "#1F1B2B"))
+                        .cornerRadius(10)
+                        .padding(.horizontal, 20)
+                }
+                
+                Spacer()
+            }
+            .padding(.vertical, 20)
+        }
+        .navigationTitle("Add Entry")
+        .background(Color(hex: "#1F1B2B").edgesIgnoringSafeArea(.all))
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(image: $image)
+        }
+        .alert(isPresented: $showAlert) {
+            Alert(title: Text("Submission Status"),
+                  message: Text(alertMessage),
+                  dismissButton: .default(Text("OK")))
+        }
+    }
+    
+    private func submitEntry() {
+        // Ensure name is provided.
+        guard !name.isEmpty else {
+            alertMessage = "Please enter a name."
+            showAlert = true
+            return
+        }
+        
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: URL(string: "http://INSERTIPHERE:8000/register")!)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        // Add name field.
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"name\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(name)\r\n".data(using: .utf8)!)
+        // Add info field.
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"info\"\r\n\r\n".data(using: .utf8)!)
+        body.append("\(info)\r\n".data(using: .utf8)!)
+        
+        // Optionally add image file if available.
+        if let image = image, let imageData = image.jpegData(compressionQuality: 0.8) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+            body.append(imageData)
+            body.append("\r\n".data(using: .utf8)!)
+        }
+        
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    alertMessage = "Error: \(error.localizedDescription)"
+                    showAlert = true
+                    return
+                }
+                if let data = data {
+                    do {
+                        let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+                        // Check if the API returned an error message.
+                        if let errorMsg = jsonResponse?["error"] as? String {
+                            alertMessage = errorMsg
+                        } else {
+                            alertMessage = jsonResponse?["message"] as? String ?? "Unknown response from server."
+                        }
+                    } catch {
+                        alertMessage = "Failed to parse server response."
+                    }
+                } else {
+                    alertMessage = "No data received from server."
+                }
+                showAlert = true
+            }
+        }.resume()
+    }
+}
+
+// MARK: - Image Picker
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.image = image
+            }
+            picker.dismiss(animated: true)
+        }
+    }
+}
+
+// MARK: - Preview
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
