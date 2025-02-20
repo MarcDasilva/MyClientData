@@ -9,6 +9,6 @@ This is an iOS facial recognition app that can pull up custom user files with an
 - iOS app built on Xcode through Swift
 
   
-##Info
+## Info
 - API backend can be found under master branch
 - Frontend Xcode can be found under Xcode branch
